@@ -63,7 +63,7 @@ public class DownloaderThread extends Thread {
             }
 
             Map<String, List<String>> requestHeaders = urlConnection.getRequestProperties();
-            System.out.println(requestHeaders);
+//            System.out.println(requestHeaders);
 
             Map<String, List<String>> responseHeaders = urlConnection.getHeaderFields();
             downloaderCallback.onResponseHeadersReceived(responseHeaders);

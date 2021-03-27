@@ -3,12 +3,14 @@ import java.util.List;
 
 public class Speedometer extends Thread {
 
+    private String filename;
     private long totalLength;
     private long downloadedLength;
     private long previousLength;
     private List<DownloaderThread> downloaders;
 
-    public Speedometer(long totalLength, List<DownloaderThread> downloaders) {
+    public Speedometer(String filename, long totalLength, List<DownloaderThread> downloaders) {
+        this.filename = filename;
         this.totalLength = totalLength;
         this.downloaders = downloaders;
         this.downloadedLength = 0;
@@ -45,8 +47,8 @@ public class Speedometer extends Thread {
                 time = timeOfDay.toString();
             }
 
-            String info = String.format("Size: %.2f GB \t Speed: %.2f MB/s \t Status: %.2f %% \t Remaining: %s", size, speedMB, percentage, time);
-            System.out.println(info);
+            String info = String.format("\u001B[32m File: %s \t Size: %.2f GB \t Speed: %.2f MB/s \t Status: %.2f %% \t Remaining: %s\r", filename, size, speedMB, percentage, time);
+            System.out.print(info);
 
             previousLength = downloadedLength;
 
