@@ -1,3 +1,5 @@
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -19,6 +21,7 @@ public class Speedometer extends Thread {
 
     @Override
     public void run() {
+        System.out.println();
         while (downloadedLength != totalLength) {
             downloadedLength = 0;
 
@@ -47,6 +50,11 @@ public class Speedometer extends Thread {
                 time = timeOfDay.toString();
             }
 
+            try {
+                filename = URLDecoder.decode(filename, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
             String info = String.format("\u001B[32m File: %s \t Size: %.2f GB \t Speed: %.2f MB/s \t Status: %.2f %% \t Remaining: %s\r", filename, size, speedMB, percentage, time);
             System.out.print(info);
 
@@ -58,7 +66,5 @@ public class Speedometer extends Thread {
                 e.printStackTrace();
             }
         }
-
-        System.out.println("Speedometer is done!");
     }
 }

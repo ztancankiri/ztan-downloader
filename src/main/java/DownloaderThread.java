@@ -1,8 +1,23 @@
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.ssl.SSLContextBuilder;
+
+import javax.net.ssl.SSLException;
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.List;
-import java.util.Map;
+import java.net.NetworkInterface;
+import java.nio.file.Paths;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 
 public class DownloaderThread extends Thread {
 
@@ -11,23 +26,13 @@ public class DownloaderThread extends Thread {
 
     private String url;
     private String filePath;
-    private InputStream inputStream;
-    private BufferedInputStream bufferedInputStream;
     private DownloaderCallback downloaderCallback;
     private long start;
     private long end;
     private long offset;
-
     private long downloadedBytes;
-
-    public DownloaderThread(String url, String filePath, DownloaderCallback downloaderCallback) {
-        this.url = url;
-        this.filePath = filePath;
-        this.downloaderCallback = downloaderCallback;
-        this.start = -1;
-        this.end = -1;
-        this.downloadedBytes = 0;
-    }
+    private NetworkInterface networkInterface;
+    private String directory;
 
     public DownloaderThread(String url, String filePath, long start, long end, long offset, DownloaderCallback downloaderCallback) {
         this.url = url;
@@ -37,42 +42,85 @@ public class DownloaderThread extends Thread {
         this.end = end;
         this.downloadedBytes = offset;
         this.offset = offset;
+        this.networkInterface = null;
+        this.directory = null;
     }
 
-    @Override
-    public void run() {
+    public DownloaderThread(String url, String filePath, DownloaderCallback downloaderCallback) {
+        this(url, filePath, -1, -1, 0, downloaderCallback);
+    }
+
+    public DownloaderThread(String url, String filePath) {
+        this(url, filePath, -1, -1, 0, null);
+    }
+
+    public DownloaderThread(String url, String filePath, long start, long end, long offset) {
+        this(url, filePath, start, end, offset, null);
+    }
+
+    public void setNetworkInterface(NetworkInterface networkInterface) {
+        this.networkInterface = networkInterface;
+    }
+
+    public void setDirectory(String directory) {
+        this.directory = directory;
+    }
+
+    private static CloseableHttpClient getCloseableHttpClient() {
+        CloseableHttpClient httpClient = null;
+        try {
+            httpClient = HttpClients.custom().
+                    setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE).
+                    setSSLContext(new SSLContextBuilder().loadTrustMaterial(null, new TrustStrategy()
+                    {
+                        public boolean isTrusted(X509Certificate[] arg0, String arg1) throws CertificateException
+                        {
+                            return true;
+                        }
+                    }).build()).build();
+        } catch (KeyManagementException | KeyStoreException | NoSuchAlgorithmException e) {
+        }
+        return httpClient;
+    }
+
+    private void download() throws IOException {
         try {
             if (offset == -1) {
                 downloadedBytes = end - start + 1;
                 return;
             }
 
-            HttpURLConnection urlConnection = (HttpURLConnection) new URL(url).openConnection();
-            urlConnection.setInstanceFollowRedirects(true);
-            urlConnection.setConnectTimeout(30000);
-            urlConnection.setReadTimeout(30000);
+            CloseableHttpClient client = getCloseableHttpClient();
+            HttpGet request = new HttpGet(url);
 
-            urlConnection.setRequestProperty("User-Agent", USER_AGENT);
+            if (networkInterface != null) {
+                RequestConfig config = RequestConfig.custom().setLocalAddress(networkInterface.getInetAddresses().nextElement()).build();
+                request.setConfig(config);
+            }
+
+            request.setHeader("User-Agent", USER_AGENT);
 
             if (start != -1 && end != -1) {
                 if (offset != 0) {
                     start += offset;
                 }
 
-                urlConnection.setRequestProperty("Range", "bytes=" + start + "-" + end);
+                request.setHeader("Range", "bytes=" + start + "-" + end);
             }
 
-            Map<String, List<String>> requestHeaders = urlConnection.getRequestProperties();
-//            System.out.println(requestHeaders);
+            HttpResponse response = client.execute(request);
+            HttpEntity entity = response.getEntity();
 
-            Map<String, List<String>> responseHeaders = urlConnection.getHeaderFields();
-            downloaderCallback.onResponseHeadersReceived(responseHeaders);
+            if (downloaderCallback != null) {
+                downloaderCallback.onContentLengthReceived(entity.getContentLength());
+            }
 
-            long contentLength = Long.parseLong(responseHeaders.get("Content-Length").get(0));
-            downloaderCallback.onContentLengthReceived(contentLength);
+            if (directory != null && !filePath.contains(directory)) {
+                filePath = Paths.get(directory, filePath).toString();
+            }
 
             if (start != -1 && end != -1) {
-                BufferedInputStream in = new BufferedInputStream(urlConnection.getInputStream());
+                BufferedInputStream in = new BufferedInputStream(entity.getContent());
                 FileOutputStream fileOutputStream = new FileOutputStream(filePath, offset != 0);
 
                 byte[] dataBuffer = new byte[BUFFER_SIZE];
@@ -83,7 +131,20 @@ public class DownloaderThread extends Thread {
                 }
 
                 fileOutputStream.close();
+                in.close();
             }
+
+            client.close();
+        }
+        catch (SSLException e) {
+            download();
+        }
+    }
+
+    @Override
+    public void run() {
+        try {
+            download();
         } catch (IOException e) {
             e.printStackTrace();
         }

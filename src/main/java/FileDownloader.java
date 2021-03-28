@@ -1,117 +1,93 @@
 import java.io.File;
+import java.net.NetworkInterface;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class FileDownloader extends Thread {
 
     private String url;
     private String filename;
     private int chunkCount;
+    private NetworkInterface networkInterface;
+    private String directory;
 
     public FileDownloader(String url, String filename, int chunkCount) {
         this.url = url;
         this.filename = filename;
         this.chunkCount = chunkCount;
+        this.networkInterface = null;
+        this.directory = null;
     }
 
     public FileDownloader(String url, int chunkCount) {
-        this.url = url;
-        this.chunkCount = chunkCount;
-        this.filename = url.substring(url.lastIndexOf('/') + 1);
+        this(url, url.substring(url.lastIndexOf('/') + 1), chunkCount);
+    }
+
+    public void setNetworkInterface(NetworkInterface networkInterface) {
+        this.networkInterface = networkInterface;
+    }
+
+    public void setDirectory(String directory) {
+        this.directory = directory;
     }
 
     @Override
     public void run() {
-        DownloaderThread downloaderThread = new DownloaderThread(url, filename, new DownloaderCallback() {
-            @Override
-            public void onResponseHeadersReceived(Map<String, List<String>> headers) {
-//                System.out.println(headers);
+        DownloaderThread downloaderThread = new DownloaderThread(url, filename, length -> {
+            long part = (long) Math.floor(length / chunkCount);
+
+            FileMerger fileMerger = new FileMerger(Paths.get(directory, filename).toString());
+            List<DownloaderThread> downloaders = new ArrayList<>();
+
+            for (int i = 0; i < chunkCount; i ++) {
+                File file = new File(Paths.get(directory, filename + "." + i).toString());
+                long offset = file.exists() ? file.length() : 0;
+                offset = offset == part ? -1 : offset;
+
+                DownloaderThread downloader;
+
+                if (i == chunkCount - 1) {
+                    offset = offset == length - part * i ? -1 : offset;
+                    downloader = new DownloaderThread(url, filename + "." + i, part * i, length - 1, offset);
+                }
+                else {
+                    downloader = new DownloaderThread(url, filename + "." + i, part * i, part * (i + 1) - 1, offset);
+                }
+
+                downloaders.add(downloader);
+                downloader.setNetworkInterface(networkInterface);
+                downloader.setDirectory(directory);
+                downloader.start();
+
+                fileMerger.add(Paths.get(directory, filename + "." + i).toString());
             }
 
-            @Override
-            public void onContentLengthReceived(long length) {
-                long part = (long) Math.floor(length / chunkCount);
+            Speedometer speedometer = new Speedometer(filename, length, downloaders);
+            speedometer.start();
 
-                FileMerger fileMerger = new FileMerger(filename);
-                List<DownloaderThread> downloaders = new ArrayList<>();
-
-                for (int i = 0; i < chunkCount; i ++) {
-                    File file = new File(filename + "." + i);
-                    long offset = file.exists() ? file.length() : 0;
-                    offset = offset == part ? -1 : offset;
-
-                    if (i == chunkCount - 1) {
-                        offset = offset == length - part * i ? -1 : offset;
-
-                        DownloaderThread downloader = new DownloaderThread(url, filename + "." + i, part * i, length - 1, offset, new DownloaderCallback() {
-
-                            @Override
-                            public void onResponseHeadersReceived(Map<String, List<String>> headers) {
-
-                            }
-
-                            @Override
-                            public void onContentLengthReceived(long length) {
-
-                            }
-                        });
-                        downloaders.add(downloader);
-                        downloader.start();
-                    }
-                    else {
-                        DownloaderThread downloader = new DownloaderThread(url, filename + "." + i, part * i, part * (i + 1) - 1, offset, new DownloaderCallback() {
-
-                            @Override
-                            public void onResponseHeadersReceived(Map<String, List<String>> headers) {
-
-                            }
-
-                            @Override
-                            public void onContentLengthReceived(long length) {
-
-                            }
-                        });
-                        downloaders.add(downloader);
-                        downloader.start();
-                    }
-
-                    fileMerger.add(filename + "." + i);
-                }
-
-                Speedometer speedometer = new Speedometer(filename, length, downloaders);
-                speedometer.start();
-
-                for (DownloaderThread downloader : downloaders) {
-                    try {
-                        downloader.join();
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-                }
-
+            for (DownloaderThread downloader : downloaders) {
                 try {
-                    speedometer.join();
+                    downloader.join();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-
-                System.out.println("Merging file...");
-                fileMerger.merge();
-                System.out.println("File is merged!");
-
-                boolean deleted = true;
-
-                for (int i = 0; i < chunkCount; i++) {
-                    File partFile = new File(filename + "." + i);
-                    deleted = deleted && partFile.delete();
-                }
-
-                if (deleted) {
-                    System.out.println("The file is downloaded!");
-                }
             }
+
+            try {
+                speedometer.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            fileMerger.merge();
         });
+        downloaderThread.setNetworkInterface(networkInterface);
         downloaderThread.start();
+        try {
+            downloaderThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

@@ -1,4 +1,5 @@
 import java.io.*;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -18,6 +19,7 @@ public class FileMerger {
 
     public void merge() {
         try {
+            destPath = URLDecoder.decode(destPath, "UTF-8");
             FileOutputStream fileOutputStream = new FileOutputStream(destPath);
 
             for (String filePath : fileList) {
@@ -32,6 +34,8 @@ public class FileMerger {
 
                 fileInputStream.close();
                 in.close();
+
+                new File(filePath).delete();
             }
 
             fileOutputStream.close();
