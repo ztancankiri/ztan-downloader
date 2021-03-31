@@ -26,7 +26,7 @@ public class FileManager extends Thread implements DownloaderCallback {
 
     @Override
     public void run() {
-        Downloader downloader = new Downloader(networkInterface, this, url, null, null, null, null, null);
+        Downloader downloader = new Downloader(networkInterface, this, url, null, null, null, null);
         downloader.start();
 
         try {
@@ -48,16 +48,13 @@ public class FileManager extends Thread implements DownloaderCallback {
             Downloader downloader;
             String chunkFilename = String.format("%s.part-%d", filename, i);
             String chunkPath = Paths.get(directory, chunkFilename).toString();
-
             fileMerger.add(chunkPath);
 
-            Long chunkLength = getChunkLength(chunkPath);
-
             if (i == chunkCount - 1) {
-                downloader = new Downloader(networkInterface, null, url, directory, chunkFilename, chunkSize * i, length - 1, chunkLength);
+                downloader = new Downloader(networkInterface, null, url, directory, chunkFilename, chunkSize * i, length - 1);
             }
             else {
-                downloader = new Downloader(networkInterface, null, url, directory, chunkFilename, chunkSize * i, chunkSize * (i + 1) - 1, chunkLength);
+                downloader = new Downloader(networkInterface, null, url, directory, chunkFilename, chunkSize * i, chunkSize * (i + 1) - 1);
             }
 
             downloaders.add(downloader);
@@ -70,6 +67,15 @@ public class FileManager extends Thread implements DownloaderCallback {
         if (flag) {
             fileMerger.merge();
         }
+    }
+
+    @Override
+    public void onErrorReceived(Downloader downloader) {
+        downloaders.remove(downloader);
+
+        Downloader newDownloader = new Downloader(networkInterface, null, url, directory, downloader.getFilename(), downloader.getStartPosition(), downloader.getEndPosition());
+        downloaders.add(newDownloader);
+        newDownloader.start();
     }
 
     private boolean waitForDownloaders() {
@@ -97,16 +103,5 @@ public class FileManager extends Thread implements DownloaderCallback {
         }
 
         return true;
-    }
-
-    private Long getChunkLength(String chunkPath) {
-        File file = new File(chunkPath);
-
-        if (file.exists()) {
-            return file.length();
-        }
-        else {
-            return null;
-        }
     }
 }

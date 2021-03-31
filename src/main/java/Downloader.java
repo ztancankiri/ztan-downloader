@@ -26,7 +26,7 @@ public class Downloader extends Thread {
     private HttpGet request;
     private Long downloaded;
 
-    public Downloader(NetworkInterface networkInterface, DownloaderCallback downloaderCallback, String url, String directory, String filename, Long startPosition, Long endPosition, Long downloaded) {
+    public Downloader(NetworkInterface networkInterface, DownloaderCallback downloaderCallback, String url, String directory, String filename, Long startPosition, Long endPosition) {
         this.networkInterface = networkInterface;
         this.downloaderCallback = downloaderCallback;
         this.url = url;
@@ -37,7 +37,10 @@ public class Downloader extends Thread {
 
         this.httpClient = HttpClients.createDefault();
         this.request = new HttpGet(url);
-        this.downloaded = downloaded;
+
+        if (directory != null && filename != null) {
+            this.downloaded = getFileLength(Paths.get(directory, filename).toString());
+        }
 
         if (networkInterface != null) {
             this.request.setConfig(RequestConfig.custom().setLocalAddress(networkInterface.getInetAddresses().nextElement()).build());
@@ -91,17 +94,41 @@ public class Downloader extends Thread {
         bufferedInputStream.close();
     }
 
+    private Long getFileLength(String filePath) {
+        File file = new File(filePath);
+
+        if (file.exists()) {
+            return file.length();
+        }
+        else {
+            return null;
+        }
+    }
+
     @Override
     public void run() {
-        try {
-            if (startPosition != null && endPosition != null && downloaded == endPosition - startPosition + 1) {
-                return;
-            }
+        if (startPosition != null && endPosition != null && downloaded == endPosition - startPosition + 1) {
+            return;
+        }
 
+        try {
             download();
         } catch (Exception e) {
             e.printStackTrace();
+            downloaderCallback.onErrorReceived(this);
         }
+    }
+
+    public String getFilename() {
+        return filename;
+    }
+
+    public Long getStartPosition() {
+        return startPosition;
+    }
+
+    public Long getEndPosition() {
+        return endPosition;
     }
 
     public Long getDownloaded() {
