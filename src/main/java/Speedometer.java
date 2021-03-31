@@ -6,41 +6,42 @@ import java.util.List;
 public class Speedometer extends Thread {
 
     private String filename;
-    private long totalLength;
-    private long downloadedLength;
-    private long previousLength;
-    private List<DownloaderThread> downloaders;
+    private Long totalSize;
+    private Long downloaded;
+    private Long previous;
+    private List<Downloader> downloaders;
 
-    public Speedometer(String filename, long totalLength, List<DownloaderThread> downloaders) {
+    public Speedometer(String filename, long totalSize, List<Downloader> downloaders) {
         this.filename = filename;
-        this.totalLength = totalLength;
+        this.totalSize = totalSize;
         this.downloaders = downloaders;
-        this.downloadedLength = 0;
-        this.previousLength = 0;
+        this.downloaded = 0L;
+        this.previous = 0L;
     }
 
     @Override
     public void run() {
         System.out.println();
-        while (downloadedLength != totalLength) {
-            downloadedLength = 0;
 
-            for (DownloaderThread downloader : downloaders) {
-                downloadedLength += downloader.getDownloadedBytes();
+        while (!downloaded.equals(totalSize)) {
+            downloaded = 0L;
+
+            for (Downloader downloader : downloaders) {
+                downloaded += downloader.getDownloaded();
             }
 
-            double size = totalLength;
+            double size = totalSize;
             size /= 1024 * 1024 * 1024; // GB
 
-            double percentage = downloadedLength * 100;
-            percentage /= totalLength;
+            double percentage = downloaded * 100;
+            percentage /= totalSize;
 
-            double speed = downloadedLength - previousLength;
+            double speed = downloaded - previous;
 
             double speedMB = speed;
             speedMB /= 1024 * 1024; // MB
 
-            long remainingSize = totalLength - downloadedLength;
+            long remainingSize = totalSize - downloaded;
             long remainingTime = (long) (remainingSize / speed);
 
             String time = "";
@@ -55,16 +56,20 @@ public class Speedometer extends Thread {
             } catch (UnsupportedEncodingException e) {
                 e.printStackTrace();
             }
-            String info = String.format("\u001B[32m File: %s \t Size: %.2f GB \t Speed: %.2f MB/s \t Status: %.2f %% \t Remaining: %s\r", filename, size, speedMB, percentage, time);
+            String info = String.format("\u001B[32mFile: %s \t Size: %.2f GB \t Speed: %.2f MB/s \t Status: %.2f %% \t Remaining: %s\r", filename, size, speedMB, percentage, time);
             System.out.print(info);
 
-            previousLength = downloadedLength;
+            previous = downloaded;
 
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            sleep(1);
+        }
+    }
+
+    private void sleep(int seconds) {
+        try {
+            Thread.sleep(seconds * 1000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
     }
 }

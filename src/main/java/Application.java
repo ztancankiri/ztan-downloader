@@ -128,22 +128,20 @@ public class Application {
                 BufferedReader reader = new BufferedReader(new FileReader(batchFilePath));
 
                 for (String line; (line = reader.readLine()) != null;) {
-                    FileDownloader fileDownloader = new FileDownloader(line, chunkCount);
-                    fileDownloader.setNetworkInterface(nif);
-                    fileDownloader.setDirectory(directory);
-                    fileDownloader.start();
-                    fileDownloader.join();
+                    String filename = line.substring(line.lastIndexOf('/') + 1);
+                    FileManager fileManager = new FileManager(nif, line, directory, filename, chunkCount);
+                    fileManager.start();
+                    fileManager.join();
                 }
                 reader.close();
             }
             else if (cmd.hasOption("url")) {
                 String downloadUrl = cmd.getOptionValue("url");
 
-                FileDownloader fileDownloader = new FileDownloader(downloadUrl, chunkCount);
-                fileDownloader.setNetworkInterface(nif);
-                fileDownloader.setDirectory(directory);
-                fileDownloader.start();
-                fileDownloader.join();
+                String filename = downloadUrl.substring(downloadUrl.lastIndexOf('/') + 1);
+                FileManager fileManager= new FileManager(nif, downloadUrl, directory, filename, chunkCount);
+                fileManager.start();
+                fileManager.join();
             }
             else {
                 HelpFormatter formatter = new HelpFormatter();
