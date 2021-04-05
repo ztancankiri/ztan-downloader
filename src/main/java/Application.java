@@ -1,8 +1,6 @@
 import org.apache.commons.cli.*;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+import java.io.*;
 import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.util.*;
@@ -43,7 +41,9 @@ public class Application {
         return networkInterface;
     }
 
-    public static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException, FileNotFoundException {
+        System.setProperty("https.protocols", "TLSv1,TLSv1.1,TLSv1.2");
+
         Options options = new Options();
 
         options.addOption(Option.builder("d")
@@ -80,6 +80,13 @@ public class Application {
                 .argName("network interface to bind")
                 .hasArg()
                 .desc("The network interface to bind.")
+                .build());
+
+        options.addOption(Option.builder("l")
+                .longOpt("log")
+                .argName("log file path")
+                .hasArg()
+                .desc("The path of the file which the logs are saved.")
                 .build());
 
         CommandLineParser parser = new DefaultParser();
@@ -125,15 +132,27 @@ public class Application {
 
             if (cmd.hasOption("batch")) {
                 String batchFilePath = cmd.getOptionValue("batch");
-                BufferedReader reader = new BufferedReader(new FileReader(batchFilePath));
+                File batchFile = new File(batchFilePath);
+                int batchFileLength = (int) batchFile.length();
+                char[] buffer = new char[batchFileLength];
+                FileReader reader = new FileReader(batchFile);
+                reader.read(buffer, 0, batchFileLength);
+                reader.close();
 
-                for (String line; (line = reader.readLine()) != null;) {
+                String batchFileContent = new String(buffer).replaceAll("\r", "");
+                String[] lines = batchFileContent.split("\n");
+
+                for (String line : lines) {
                     String filename = line.substring(line.lastIndexOf('/') + 1);
                     FileManager fileManager = new FileManager(nif, line, directory, filename, chunkCount);
                     fileManager.start();
                     fileManager.join();
+
+                    String updatedContent = batchFileContent.replace(line + "\n", "");
+                    FileWriter writer = new FileWriter(batchFile);
+                    writer.write(updatedContent);
+                    writer.close();
                 }
-                reader.close();
             }
             else if (cmd.hasOption("url")) {
                 String downloadUrl = cmd.getOptionValue("url");
@@ -146,6 +165,16 @@ public class Application {
             else {
                 HelpFormatter formatter = new HelpFormatter();
                 formatter.printHelp("zDownloader", options);
+            }
+
+            if (cmd.hasOption("log")) {
+                String logPath = cmd.getOptionValue("log");
+
+                File file = new File(logPath);
+                FileOutputStream fos = new FileOutputStream(file);
+                PrintStream ps = new PrintStream(fos);
+                System.setErr(ps);
+                System.setOut(ps);
             }
         } catch (ParseException e) {
             HelpFormatter formatter = new HelpFormatter();

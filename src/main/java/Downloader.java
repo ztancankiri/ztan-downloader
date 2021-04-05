@@ -15,7 +15,8 @@ public class Downloader extends Thread {
     public static final int BUFFER_SIZE = 16384;
 
     private NetworkInterface networkInterface;
-    private DownloaderCallback downloaderCallback;
+    private ContentLengthCallback contentLengthCallback;
+    private ErrorReceiveCallback errorReceiveCallback;
     private String url;
     private String directory;
     private String filename;
@@ -26,9 +27,10 @@ public class Downloader extends Thread {
     private HttpGet request;
     private Long downloaded;
 
-    public Downloader(NetworkInterface networkInterface, DownloaderCallback downloaderCallback, String url, String directory, String filename, Long startPosition, Long endPosition) {
+    public Downloader(NetworkInterface networkInterface, ContentLengthCallback contentLengthCallback, ErrorReceiveCallback errorReceiveCallback, String url, String directory, String filename, Long startPosition, Long endPosition) {
         this.networkInterface = networkInterface;
-        this.downloaderCallback = downloaderCallback;
+        this.contentLengthCallback = contentLengthCallback;
+        this.errorReceiveCallback = errorReceiveCallback;
         this.url = url;
         this.directory = directory;
         this.filename = filename;
@@ -66,8 +68,8 @@ public class Downloader extends Thread {
         HttpResponse response = httpClient.execute(request);
         HttpEntity entity = response.getEntity();
 
-        if (downloaderCallback != null) {
-            downloaderCallback.onContentLengthReceived(entity.getContentLength());
+        if (contentLengthCallback != null) {
+            contentLengthCallback.onContentLengthReceived(entity.getContentLength());
         }
 
         if (directory != null && filename != null) {
@@ -114,8 +116,7 @@ public class Downloader extends Thread {
         try {
             download();
         } catch (Exception e) {
-            e.printStackTrace();
-            downloaderCallback.onErrorReceived(this);
+            errorReceiveCallback.onErrorReceived(this);
         }
     }
 

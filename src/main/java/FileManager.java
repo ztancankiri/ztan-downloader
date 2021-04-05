@@ -4,7 +4,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileManager extends Thread implements DownloaderCallback {
+public class FileManager extends Thread implements ContentLengthCallback, ErrorReceiveCallback {
 
     private NetworkInterface networkInterface;
     private String url;
@@ -24,9 +24,30 @@ public class FileManager extends Thread implements DownloaderCallback {
         this.downloaders = new ArrayList<>();
     }
 
+    private boolean partFileExists() {
+        File folder = new File(directory);
+        File[] files = folder.listFiles();
+
+        if (files != null) {
+            for (File file : files) {
+                if (file.isFile() && file.getName().contains(filename + ".part-")) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     @Override
     public void run() {
-        Downloader downloader = new Downloader(networkInterface, this, url, null, null, null, null);
+        File file = new File(Paths.get(directory, filename).toString());
+
+        if (file.exists() && !partFileExists()) {
+            return;
+        }
+
+        Downloader downloader = new Downloader(networkInterface, this, null, url, null, null, null, null);
         downloader.start();
 
         try {
@@ -42,7 +63,7 @@ public class FileManager extends Thread implements DownloaderCallback {
         long chunkSize = (long) Math.floor(length / tmp);
 
         String filePath = Paths.get(directory, filename).toString();
-        FileMerger fileMerger = new FileMerger(filePath);
+        FileMerger fileMerger = new FileMerger(filePath, 1024 * 1024 * 50);
 
         for (int i = 0; i < chunkCount; i ++) {
             Downloader downloader;
@@ -51,10 +72,10 @@ public class FileManager extends Thread implements DownloaderCallback {
             fileMerger.add(chunkPath);
 
             if (i == chunkCount - 1) {
-                downloader = new Downloader(networkInterface, null, url, directory, chunkFilename, chunkSize * i, length - 1);
+                downloader = new Downloader(networkInterface, null, this, url, directory, chunkFilename, chunkSize * i, length - 1);
             }
             else {
-                downloader = new Downloader(networkInterface, null, url, directory, chunkFilename, chunkSize * i, chunkSize * (i + 1) - 1);
+                downloader = new Downloader(networkInterface, null, this, url, directory, chunkFilename, chunkSize * i, chunkSize * (i + 1) - 1);
             }
 
             downloaders.add(downloader);
@@ -73,7 +94,7 @@ public class FileManager extends Thread implements DownloaderCallback {
     public void onErrorReceived(Downloader downloader) {
         downloaders.remove(downloader);
 
-        Downloader newDownloader = new Downloader(networkInterface, null, url, directory, downloader.getFilename(), downloader.getStartPosition(), downloader.getEndPosition());
+        Downloader newDownloader = new Downloader(networkInterface, null,this,  url, directory, downloader.getFilename(), downloader.getStartPosition(), downloader.getEndPosition());
         downloaders.add(newDownloader);
         newDownloader.start();
     }
